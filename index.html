@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>校园表白墙</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      background: linear-gradient(135deg, #ffdde1 0%, #ee9ca7 100%);
+      min-height: 100vh;
+      padding: 20px 15px 40px;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header {
+      text-align: center;
+      color: white;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      margin: 30px 0 25px;
+    }
+    .header h1 { font-size: 36px; letter-spacing: 2px; }
+    .header p { opacity: 0.9; margin-top: 8px; font-size: 15px; }
+
+    .form-card {
+      background: white;
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    .form-card input, .form-card textarea {
+      width: 100%;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border: 1px solid #f0e0e5;
+      border-radius: 16px;
+      font-size: 16px;
+      background: #fef9fa;
+      outline: none;
+    }
+    .form-card input:focus, .form-card textarea:focus {
+      border-color: #ff8fa3;
+      background: white;
+    }
+    .form-card textarea { height: 100px; resize: vertical; }
+    .form-card button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #ff758c, #ff7eb3);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 6px 20px rgba(255,117,140,0.3);
+    }
+    .form-card button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(255,117,140,0.4);
+    }
+    .form-card button:active { transform: scale(0.98); }
+
+    .post-card {
+      background: white;
+      border-radius: 24px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      transition: transform 0.2s;
+    }
+    .post-card:hover { transform: translateY(-2px); }
+    .post-to {
+      font-size: 22px;
+      color: #ff4d6d;
+      font-weight: bold;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+    }
+    .post-to::before {
+      content: "💌";
+      margin-right: 8px;
+      font-size: 24px;
+    }
+    .post-message {
+      font-size: 18px;
+      color: #333;
+      line-height: 1.6;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff5f7;
+      padding: 16px;
+      border-radius: 16px;
+    }
+    .post-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #999;
+      font-size: 14px;
+    }
+    .post-from {
+      background: #ffeef2;
+      padding: 4px 14px;
+      border-radius: 20px;
+      color: #e8547e;
+    }
+    .load-more { text-align: center; margin: 20px 0; }
+    .load-more button {
+      background: none;
+      border: 2px solid white;
+      color: white;
+      padding: 10px 30px;
+      border-radius: 50px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .load-more button:hover {
+      background: white;
+      color: #ff758c;
+    }
+    .empty-state {
+      text-align: center;
+      color: white;
+      font-size: 17px;
+      margin-top: 40px;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💖 校园表白墙</h1>
+      <p>勇敢说出心里话，让青春不留遗憾</p>
+    </div>
+
+    <div class="form-card">
+      <input type="text" id="toName" placeholder="对谁说（必填）*" maxlength="30">
+      <input type="text" id="fromName" placeholder="你的称呼（选填，默认「匿名」）" maxlength="30">
+      <textarea id="message" placeholder="写下你想说的话..." maxlength="500"></textarea>
+      <button id="submitBtn">🌸 匿名发射</button>
+    </div>
+
+    <div id="postsContainer"></div>
+    <div class="load-more" id="loadMoreArea" style="display:none;">
+      <button id="loadMoreBtn">查看更多表白</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      if (!window.__supaClient) {
+        const SUPABASE_URL = 'https://yjeqxymgjibwagznkfbw.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZXF4eW1namlid2Fnem5rZmJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMTE3NjYsImV4cCI6MjA5Mzc4Nzc2Nn0.jdz9lAcLwDB9FvY3kb148oJ-2lHVBGoVQIbmKk8oC18';
+        window.__supaClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+      const supabase = window.__supaClient;
+      const PAGE_SIZE = 10;
+      let currentOffset = 0;
+
+      const postsContainer = document.getElementById('postsContainer');
+      const loadMoreArea = document.getElementById('loadMoreArea');
+      const loadMoreBtn = document.getElementById('loadMoreBtn');
+      const submitBtn = document.getElementById('submitBtn');
+
+      function escapeHtml(text) {
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function formatTime(dateStr) {
+        const d = new Date(dateStr);
+        const now = new Date();
+        const diff = Math.floor((now - d) / 1000);
+        if (diff < 60) return '刚刚';
+        if (diff < 3600) return Math.floor(diff/60) + '分钟前';
+        if (diff < 86400) return Math.floor(diff/3600) + '小时前';
+        return d.toLocaleDateString();
+      }
+
+      function renderPosts(posts, append = false) {
+        if (!append) postsContainer.innerHTML = '';
+        if (!posts || posts.length === 0) {
+          if (!append) {
+            postsContainer.innerHTML = '<div class="empty-state">✨ 还没有表白，快来写下第一条吧 ✨</div>';
+          }
+          loadMoreArea.style.display = 'none';
+          return;
+        }
+
+        const html = posts.map(post => `
+          <div class="post-card">
+            <div class="post-to">${escapeHtml(post.to_name)}</div>
+            <div class="post-message">${escapeHtml(post.message)}</div>
+            <div class="post-meta">
+              <span class="post-from">${escapeHtml(post.from_name) || '匿名'}</span>
+              <span>${formatTime(post.created_at)}</span>
+            </div>
+          </div>
+        `).join('');
+
+        if (append) {
+          postsContainer.insertAdjacentHTML('beforeend', html);
+        } else {
+          postsContainer.innerHTML = html;
+        }
+
+        if (posts.length < PAGE_SIZE) {
+          loadMoreArea.style.display = 'none';
+        } else {
+          loadMoreArea.style.display = 'block';
+        }
+      }
+
+      async function loadPosts(append = false) {
+        if (!append) currentOffset = 0;
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(currentOffset, currentOffset + PAGE_SIZE - 1);
+
+        if (error) {
+          if (!append) postsContainer.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
+          console.error(error);
+          return;
+        }
+
+        renderPosts(data, append);
+        currentOffset += PAGE_SIZE;
+      }
+
+      submitBtn.addEventListener('click', async () => {
+        const toName = document.getElementById('toName').value.trim();
+        const fromName = document.getElementById('fromName').value.trim() || '匿名';
+        const message = document.getElementById('message').value.trim();
+
+        if (!toName || !message) return alert('请填写“对谁说”和表白内容～');
+        if (toName.length > 30 || fromName.length > 30 || message.length > 500) {
+          return alert('内容太长，请精简一点啦');
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = '发送中…';
+        const { error } = await supabase.from('posts').insert([
+          { to_name: toName, from_name: fromName, message: message }
+        ]);
+
+        if (error) {
+          alert('发送失败：' + error.message);
+        } else {
+          document.getElementById('toName').value = '';
+          document.getElementById('fromName').value = '';
+          document.getElementById('message').value = '';
+          await loadPosts(false);
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🌸 匿名发射';
+      });
+
+      loadMoreBtn.addEventListener('click', () => loadPosts(true));
+      loadPosts();
+    })();
+  </script>
+</body>
+</html>
